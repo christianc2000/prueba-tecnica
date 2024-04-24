@@ -1,0 +1,69 @@
+name: project-configuration-management
+
+on:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+    types: [opened, reopened, closed]
+  create:
+    branches:
+      - '*' # Notifica cuando se crea cualquier nueva rama
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    needs: [build]
+    steps:
+      - name: Notify Slack on Workflow Start
+        if: github.event_name == 'push'
+        uses: act10ns/slack@v2
+        with:
+          status: starting
+          channel: '#project-config'
+          message: 'Se detectó un evento de push en la rama << ${{ github.ref }} >>. Iniciando la construcción...'
+
+      - name: Notify Slack on Pull Request
+        if: github.event_name == 'pull_request'
+        uses: act10ns/slack@v2
+        with:
+          status: ${{ job.status }}
+          channel: '#project-config'
+          message: |
+            Pull Request ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.pull_request.number }} ${{ github.event_name }}
+            Último commit: ${{ github.event.commits[0].message }}
+            Título: ${{ github.event.pull_request.title }}
+            Autor: ${{ github.event.pull_request.user.login }}
+            Acción: ${{ github.event_name }}
+            Estado: ${{ github.event.pull_request.state }}
+
+      - name: Notify Slack on Workflow Completion
+        if: github.event_name == 'push'
+        uses: act10ns/slack@v2
+        with:
+          status: ${{ job.status }}
+          channel: '#project-config'
+          message: 'Construcción completada satisfactoriamente.'
+
+      - name: Notify Slack on New Branch
+        if: github.event_name == 'create'
+        uses: act10ns/slack@v2
+        with:
+          status: starting
+          channel: '#project-config'
+          message: 'Nueva rama creada: ${{ github.event.ref }}.'
